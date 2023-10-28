@@ -5,6 +5,15 @@ import { JSXIdentifier } from "@babel/types";
 
 // ! for some reason vscode cant find correct references in javascriptreact files
 const enabledLanguages = ["typescriptreact"];
+let workspaceConfig = vscode.workspace.getConfiguration();
+const clientDecorationType = vscode.window.createTextEditorDecorationType({
+  backgroundColor: workspaceConfig.get("reactColorComponents.clientBackground"),
+  color: workspaceConfig.get("reactColorComponents.clientForeground"),
+});
+const serverDecorationType = vscode.window.createTextEditorDecorationType({
+  backgroundColor: workspaceConfig.get("reactColorComponents.serverBackground"),
+  color: workspaceConfig.get("reactColorComponents.serverForeground"),
+});
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('REACT SERVER COMPONENTS: Started "react-color-components"');
@@ -14,7 +23,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Colorize on changing the opened file.
   // TODO: IMPLEMENT Memoization
-  let textEditorChange = vscode.window.onDidChangeVisibleTextEditors(
+  let textEditorChange = vscode.window.onDidChangeActiveTextEditor(
     async (event) => {
       await colorize();
     }
@@ -32,28 +41,24 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 async function colorize() {
+  console.log("REACT-COLOR-COMPONENT: Colorizing..");
   const editor = vscode.window.activeTextEditor;
   // No editor instance or not allowed language -> bail out
   if (!editor || !enabledLanguages.includes(editor.document.languageId)) {
     return;
   }
 
-  const clientDecorationType = vscode.window.createTextEditorDecorationType({
-    backgroundColor: "skyblue",
-  });
-  editor.setDecorations(clientDecorationType, []);
+  console.log("REACT-COLOR-COMPONENT: S1 Clearing decorations...");
 
   try {
-    const plugins: babelParser.ParserPlugin[] = ["jsx"];
-    if (editor.document.languageId === "typescriptreact") {
-      plugins.push("typescript");
-    }
+    const plugins: babelParser.ParserPlugin[] = ["jsx", "typescript"];
     const ast = babelParser.parse(editor.document.getText(), {
       sourceType: "module",
       plugins: plugins,
     });
-
     const nodes: NodePath<JSXIdentifier>[] = [];
+    const clientComponents: vscode.DecorationOptions[] = [];
+    const serverComponents: vscode.DecorationOptions[] = [];
 
     traverse(ast, {
       JSXIdentifier: function (path) {
@@ -64,7 +69,6 @@ async function colorize() {
       },
     });
 
-    const clientComponents: vscode.DecorationOptions[] = [];
     for (const val of nodes) {
       const startPos = editor.document.positionAt(val.node.loc!.start.index);
       const endPos = editor.document.positionAt(val.node.loc!.end.index);
@@ -81,12 +85,14 @@ async function colorize() {
         );
       if (result && result.length > 0) {
         if (!result[0].targetUri.path.endsWith(".d.ts")) {
-          const mainDirective = ast.program.directives[0];
-          if (mainDirective.value.value === "use client") {
+          const mainDirective = ast.program.directives;
+          if (
+            mainDirective.length > 0 &&
+            mainDirective[0].value.value === "use client"
+          ) {
             clientComponents.push(decoration);
             continue;
           }
-          // ! >------<
 
           let fileContent = await vscode.workspace.openTextDocument(
             result[0].targetUri
@@ -94,21 +100,28 @@ async function colorize() {
 
           const componentAst = babelParser.parse(fileContent.getText(), {
             sourceType: "module",
-            errorRecovery: true,
             plugins: plugins,
           });
           const directives = componentAst.program.directives;
 
-          if (directives[0].value.value === "use client") {
+          if (
+            directives.length > 0 &&
+            directives[0].value.value === "use client"
+          ) {
             clientComponents.push(decoration);
+          } else {
+            serverComponents.push(decoration);
           }
         }
       }
     }
 
     editor.setDecorations(clientDecorationType, clientComponents);
+    editor.setDecorations(serverDecorationType, serverComponents);
   } catch (e) {
-    console.log(e);
+    editor.setDecorations(clientDecorationType, []);
+    editor.setDecorations(serverDecorationType, []);
+    console.log("REACT-COLOR-COMPONENT: error while parsing");
   }
 }
 

@@ -2,7 +2,9 @@
   "name": "react-component-colors",
   "displayName": "React Component Colors",
   "description": "Adds colors to React Components to differentiate Server and Client Components.",
-  "version": "0.0.1",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "publisher": "supremedeity",
   "engines": {
     "vscode": "^1.83.0"
   },
@@ -12,6 +14,37 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "contributes": {
+    "configuration": {
+      "title": "React Color Components",
+      "properties": {
+        "reactColorComponents.clientBackground": {
+          "type": "string",
+          "format": "color-hex",
+          "description": "Background color for client components",
+          "default": "#FFFFFF00"
+        },
+        "reactColorComponents.clientForeground": {
+          "type": "string",
+          "format": "color-hex",
+          "description": "Foreground color for client components",
+          "default": "#9F5F5F"
+        },
+        "reactColorComponents.serverBackground": {
+          "type": "string",
+          "format": "color-hex",
+          "description": "Background color for server components",
+          "default": "#FFFFFF00"
+        },
+        "reactColorComponents.serverForeground": {
+          "type": "string",
+          "format": "color-hex",
+          "description": "Foreground color for server components",
+          "default": "#5F759F"
+        }
+      }
+    }
+  },
   "main": "./out/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
