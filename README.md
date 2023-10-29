@@ -2,6 +2,8 @@
 
 React Component Color adds color to your React Components to help you differentiate between client and server components more easily.
 
+> WARNING: THIS EXTENSION ONLY WORKS ON TSX FILES FOR NOW
+
 > WARNING: This extension is very early in its development period and may behave weirldy.
 
 ## Extension Settings

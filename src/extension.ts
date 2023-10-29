@@ -48,8 +48,6 @@ async function colorize() {
     return;
   }
 
-  console.log("REACT-COLOR-COMPONENT: S1 Clearing decorations...");
-
   try {
     const plugins: babelParser.ParserPlugin[] = ["jsx", "typescript"];
     const ast = babelParser.parse(editor.document.getText(), {
@@ -83,6 +81,7 @@ async function colorize() {
           editor.document.uri,
           startPos
         );
+      console.log(val.node.name, result);
       if (result && result.length > 0) {
         if (!result[0].targetUri.path.endsWith(".d.ts")) {
           const mainDirective = ast.program.directives;
