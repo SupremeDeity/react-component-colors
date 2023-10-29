@@ -9,7 +9,7 @@ type ImportList = {
 };
 
 // ! for some reason vscode cant find correct references in javascriptreact files
-const enabledLanguages = ["typescriptreact"];
+const enabledLanguages = ["typescriptreact", "javascriptreact"];
 let workspaceConfig = vscode.workspace.getConfiguration();
 const clientDecorationType = vscode.window.createTextEditorDecorationType({
   backgroundColor: workspaceConfig.get("reactColorComponents.clientBackground"),
@@ -58,7 +58,10 @@ async function colorize() {
   }
 
   try {
-    const plugins: babelParser.ParserPlugin[] = ["jsx", "typescript"];
+    const plugins: babelParser.ParserPlugin[] = ["jsx"];
+    if (editor.document.languageId === "typescriptreact") {
+      plugins.push("typescript");
+    }
     const ast = babelParser.parse(editor.document.getText(), {
       sourceType: "module",
       plugins: plugins,
@@ -147,7 +150,6 @@ async function recursive(
   componentName: string,
   document: vscode.TextDocument
 ) {
-  console.log("Parsing for", componentName, uri.path);
   let isClient;
   const result: vscode.LocationLink[] = await vscode.commands.executeCommand(
     "vscode.executeDefinitionProvider",
@@ -169,7 +171,6 @@ async function recursive(
       if (directives.length > 0 && directives[0].value.value === "use client") {
         clientComponents.push(decoration);
         isClient = true;
-        console.log("Marked", componentName, "as client");
         return;
       }
 
@@ -180,22 +181,11 @@ async function recursive(
           if (loc) {
             return;
           }
-          console.log(
-            "Doing import decl for",
-            compName,
-            result[0].targetUri.path
-          );
+
           let imp = path.node.specifiers.find(
             (specifier) => specifier.local.name === compName
           );
           if (!path.node.source || !imp) {
-            console.log(
-              "IMPORt DECL: ",
-              compName,
-              uri.path,
-              result[0].targetUri.path
-            );
-            console.log(!path.node.source, !imp);
             return;
           }
 
@@ -204,7 +194,6 @@ async function recursive(
             path.node.source.loc!.start.line - 1,
             path.node.source.loc!.start.column
           );
-          console.log(compName, uri.path, result[0].targetUri.path, loc);
           return;
         },
 
@@ -212,11 +201,7 @@ async function recursive(
           if (loc) {
             return;
           }
-          console.log(
-            "Doing export named decl for",
-            compName,
-            result[0].targetUri.path
-          );
+
           let imp = path.node.specifiers.find((specifier) => {
             if (specifier.type === "ExportSpecifier") {
               if (specifier.exported.type === "Identifier") {
@@ -228,18 +213,6 @@ async function recursive(
           });
 
           if (!path.node.source || !imp || imp.type !== "ExportSpecifier") {
-            console.log(
-              "EXPORT DECL: ",
-              compName,
-              uri.path,
-              result[0].targetUri.path,
-              path.node
-            );
-            console.log(
-              !path.node.source,
-              !imp,
-              imp?.type !== "ExportSpecifier"
-            );
             return;
           }
 
@@ -250,24 +223,16 @@ async function recursive(
             path.node.source.loc!.start.line - 1,
             path.node.source.loc!.start.column
           );
-          console.log(compName, uri.path, result[0].targetUri.path, loc);
           return;
         },
       });
       if (!loc) {
-        console.log("Undefined");
         if (!isClient) {
-          console.log("Marked", compName, "as server");
           serverComponents.push(decoration);
         }
         return;
       }
-      console.log(
-        "Found location for",
-        compName,
-        uri,
-        result[0].targetUri.path
-      );
+
       await recursive(
         result[0].targetUri,
         loc,
