@@ -3,6 +3,11 @@ import * as babelParser from "@babel/parser";
 import traverse, { NodePath } from "@babel/traverse";
 import { JSXIdentifier } from "@babel/types";
 
+type ImportList = {
+  specifier: string;
+  location: vscode.Position;
+};
+
 // ! for some reason vscode cant find correct references in javascriptreact files
 const enabledLanguages = ["typescriptreact"];
 let workspaceConfig = vscode.workspace.getConfiguration();
@@ -14,6 +19,10 @@ const serverDecorationType = vscode.window.createTextEditorDecorationType({
   backgroundColor: workspaceConfig.get("reactColorComponents.serverBackground"),
   color: workspaceConfig.get("reactColorComponents.serverForeground"),
 });
+
+// ! This may need to be changed to local variable
+let clientComponents: vscode.DecorationOptions[] = [];
+let serverComponents: vscode.DecorationOptions[] = [];
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('REACT SERVER COMPONENTS: Started "react-color-components"');
@@ -29,7 +38,6 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  // TODO: only run on tsx/jsx files
   let textDocumentChange = vscode.workspace.onDidChangeTextDocument(
     async (event) => {
       await colorize();
@@ -41,7 +49,8 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 async function colorize() {
-  console.log("REACT-COLOR-COMPONENT: Colorizing..");
+  serverComponents = [];
+  clientComponents = [];
   const editor = vscode.window.activeTextEditor;
   // No editor instance or not allowed language -> bail out
   if (!editor || !enabledLanguages.includes(editor.document.languageId)) {
@@ -55,15 +64,33 @@ async function colorize() {
       plugins: plugins,
     });
     const nodes: NodePath<JSXIdentifier>[] = [];
-    const clientComponents: vscode.DecorationOptions[] = [];
-    const serverComponents: vscode.DecorationOptions[] = [];
+    const imports: ImportList[] = [];
+
+    // Check if current file is a client component
+    const currentFileDirectives = ast.program.directives;
+    let isCurrentClient = false;
+    if (
+      currentFileDirectives.length > 0 &&
+      currentFileDirectives[0].value.value === "use client"
+    ) {
+      isCurrentClient = true;
+    }
 
     traverse(ast, {
       JSXIdentifier: function (path) {
         if (path.parent.type === "JSXAttribute") {
           return;
         }
+
         nodes.push(path);
+      },
+      ImportDeclaration: function (path) {
+        const position = editor.document.positionAt(
+          path.node.source.loc!.start.index
+        );
+        for (const specifier of path.node.specifiers) {
+          imports.push({ specifier: specifier.local.name, location: position });
+        }
       },
     });
 
@@ -75,43 +102,28 @@ async function colorize() {
         range: new vscode.Range(startPos, endPos),
       };
 
-      const result: vscode.LocationLink[] =
-        await vscode.commands.executeCommand(
-          "vscode.executeDefinitionProvider",
+      // ! Temporary solution to check for intrinsic elements
+      // ! If current file has directive -> Just set all custom elements to client
+      if (
+        isCurrentClient &&
+        val.node.name[0] === val.node.name[0].toUpperCase()
+      ) {
+        clientComponents.push(decoration);
+        continue;
+      }
+
+      const matchingImport = imports.find(
+        (importItem) => importItem.specifier === val.node.name
+      );
+      if (matchingImport) {
+        await recursive(
           editor.document.uri,
-          startPos
+          matchingImport.location,
+          plugins,
+          decoration,
+          matchingImport.specifier,
+          editor.document
         );
-      console.log(val.node.name, result);
-      if (result && result.length > 0) {
-        if (!result[0].targetUri.path.endsWith(".d.ts")) {
-          const mainDirective = ast.program.directives;
-          if (
-            mainDirective.length > 0 &&
-            mainDirective[0].value.value === "use client"
-          ) {
-            clientComponents.push(decoration);
-            continue;
-          }
-
-          let fileContent = await vscode.workspace.openTextDocument(
-            result[0].targetUri
-          );
-
-          const componentAst = babelParser.parse(fileContent.getText(), {
-            sourceType: "module",
-            plugins: plugins,
-          });
-          const directives = componentAst.program.directives;
-
-          if (
-            directives.length > 0 &&
-            directives[0].value.value === "use client"
-          ) {
-            clientComponents.push(decoration);
-          } else {
-            serverComponents.push(decoration);
-          }
-        }
       }
     }
 
@@ -120,9 +132,150 @@ async function colorize() {
   } catch (e) {
     editor.setDecorations(clientDecorationType, []);
     editor.setDecorations(serverDecorationType, []);
-    console.log("REACT-COLOR-COMPONENT: error while parsing");
+    console.log("REACT-COLOR-COMPONENT:", e);
   }
 }
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
+
+async function recursive(
+  uri: vscode.Uri,
+  sourceLocation: vscode.Position,
+  plugins: babelParser.ParserPlugin[],
+  decoration: any,
+  componentName: string,
+  document: vscode.TextDocument
+) {
+  console.log("Parsing for", componentName, uri.path);
+  let isClient;
+  const result: vscode.LocationLink[] = await vscode.commands.executeCommand(
+    "vscode.executeDefinitionProvider",
+    uri,
+    sourceLocation
+  );
+  if (result && result.length > 0) {
+    if (!result[0].targetUri.path.endsWith(".d.ts")) {
+      let fileContent = await vscode.workspace.openTextDocument(
+        result[0].targetUri
+      );
+
+      const componentAst = babelParser.parse(fileContent.getText(), {
+        sourceType: "module",
+        plugins: plugins,
+      });
+      const directives = componentAst.program.directives;
+
+      if (directives.length > 0 && directives[0].value.value === "use client") {
+        clientComponents.push(decoration);
+        isClient = true;
+        console.log("Marked", componentName, "as client");
+        return;
+      }
+
+      let loc: vscode.Position | undefined;
+      let compName = componentName;
+      traverse(componentAst, {
+        ImportDeclaration: function (path) {
+          if (loc) {
+            return;
+          }
+          console.log(
+            "Doing import decl for",
+            compName,
+            result[0].targetUri.path
+          );
+          let imp = path.node.specifiers.find(
+            (specifier) => specifier.local.name === compName
+          );
+          if (!path.node.source || !imp) {
+            console.log(
+              "IMPORt DECL: ",
+              compName,
+              uri.path,
+              result[0].targetUri.path
+            );
+            console.log(!path.node.source, !imp);
+            return;
+          }
+
+          // ! could be incorrect
+          loc = new vscode.Position(
+            path.node.source.loc!.start.line - 1,
+            path.node.source.loc!.start.column
+          );
+          console.log(compName, uri.path, result[0].targetUri.path, loc);
+          return;
+        },
+
+        ExportNamedDeclaration: function (path) {
+          if (loc) {
+            return;
+          }
+          console.log(
+            "Doing export named decl for",
+            compName,
+            result[0].targetUri.path
+          );
+          let imp = path.node.specifiers.find((specifier) => {
+            if (specifier.type === "ExportSpecifier") {
+              if (specifier.exported.type === "Identifier") {
+                return specifier.exported.name === compName;
+              } else {
+                return specifier.exported.value === compName;
+              }
+            }
+          });
+
+          if (!path.node.source || !imp || imp.type !== "ExportSpecifier") {
+            console.log(
+              "EXPORT DECL: ",
+              compName,
+              uri.path,
+              result[0].targetUri.path,
+              path.node
+            );
+            console.log(
+              !path.node.source,
+              !imp,
+              imp?.type !== "ExportSpecifier"
+            );
+            return;
+          }
+
+          compName = imp.local.name;
+
+          // ! could be incorrect
+          loc = new vscode.Position(
+            path.node.source.loc!.start.line - 1,
+            path.node.source.loc!.start.column
+          );
+          console.log(compName, uri.path, result[0].targetUri.path, loc);
+          return;
+        },
+      });
+      if (!loc) {
+        console.log("Undefined");
+        if (!isClient) {
+          console.log("Marked", compName, "as server");
+          serverComponents.push(decoration);
+        }
+        return;
+      }
+      console.log(
+        "Found location for",
+        compName,
+        uri,
+        result[0].targetUri.path
+      );
+      await recursive(
+        result[0].targetUri,
+        loc,
+        plugins,
+        decoration,
+        compName,
+        document
+      );
+    }
+  }
+}
