@@ -16,7 +16,7 @@ This extension contributes the following settings:
 ## Known Issues
 
 1. The extension might not show correct results on first load for now. This will be patched in a future release.
-2. Dynamic imports do not work for now as they have not been implemented. Support will be added in a future release.
+2. Dynamic imports & require statements do not work for now as they have not been implemented. Support will be added in a future release.
 
 ## Release Notes
 
@@ -26,4 +26,10 @@ Initial release of React Component Color
 
 ### 0.1.1
 
-Complete refactoring to provide more accurate results.
+refactor: Complete refactoring to provide more accurate results.
+
+### 0.1.2
+
+refactor: Further refactoring to fix a bug where importing and exporting from the same file doesn't work
+refactor: Abstracted code into multiple files.
+docs: fixed docs to contain updated info.
