@@ -2,7 +2,12 @@
 
 React Component Color adds color to your React Components to help you differentiate between client and server components more easily.
 
+> Currently only meant with NextJS due it currently being the only major framework implementing RSC.
+
 > WARNING: This extension is very early in its development period and may behave weirldy.
+
+<img src="./assets/ReactComponentColors.png" />
+<img src="./assets/ReactComponentColors2.png" />
 
 ## Extension Settings
 
@@ -15,7 +20,7 @@ This extension contributes the following settings:
 
 ## Known Issues
 
-1. The extension might not show correct results on first load for now. This will be patched in a future release.
+1. Incorrect results may be shown on first load, make a small change to the document to fix this. This might be fixed in a future release.
 2. Dynamic imports & require statements do not work for now as they have not been implemented. Support will be added in a future release.
 
 ## Release Notes
@@ -33,3 +38,8 @@ refactor: Complete refactoring to provide more accurate results.
 refactor: Further refactoring to fix a bug where importing and exporting from the same file doesn't work
 refactor: Abstracted code into multiple files.
 docs: fixed docs to contain updated info.
+
+### 0.1.3
+
+refactor: Remove unnecessary tests and license file.
+docs: update docs and add preview images.

@@ -120,7 +120,6 @@ async function recursive(
   componentName: string,
   document: vscode.TextDocument
 ) {
-  let isClient;
   const result: vscode.LocationLink[] = await vscode.commands.executeCommand(
     "vscode.executeDefinitionProvider",
     uri,
@@ -140,7 +139,6 @@ async function recursive(
 
       if (directives.length > 0 && directives[0].value.value === "use client") {
         clientComponents.push(decoration);
-        isClient = true;
         return;
       }
 
